@@ -14,6 +14,7 @@ RUN set ex \
         automake \
         build-essential  \
         gcc \
+        git \
         libc-dev \
         libssl-dev \
         libtool  \
