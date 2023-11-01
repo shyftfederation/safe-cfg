@@ -1,52 +1,68 @@
 import logging
+from dataclasses import dataclass
+from enum import Enum
 from functools import cache
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 from urllib.parse import urljoin
 
 import requests
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class HookEvent:
+    class Type(str, Enum):
+        CHAIN_UPDATE = "CHAIN_UPDATE"
+        SAFE_APPS_UPDATE = "SAFE_APPS_UPDATE"
+
+    type: Type
+    chain_id: int
 
 
 @cache
 def setup_session() -> requests.Session:
     session = requests.Session()
-    adapter = requests.adapters.HTTPAdapter(max_retries=3)
+    adapter = requests.adapters.HTTPAdapter(
+        max_retries=settings.CGW_SESSION_MAX_RETRIES
+    )
     session.mount("http://", adapter)
     session.mount("https://", adapter)
     return session
 
 
-def flush(
-    cgw_url: Optional[str],
-    cgw_flush_token: Optional[str],
-    alternative_cgw_url: Optional[str],
-    alternative_cgw_flush_token: Optional[str],
-    json: Dict[str, Any],
-) -> None:
-    if cgw_url is None:
-        logger.error("CGW_URL is not set. Skipping hook call")
-        return
-    if cgw_flush_token is None:
-        logger.error("CGW_FLUSH_TOKEN is not set. Skipping hook call")
-        return
+def cgw_setup() -> tuple[str, str]:
+    if settings.CGW_URL is None:
+        raise ValueError("CGW_URL is not set. Skipping hook call")
+    if settings.CGW_FLUSH_TOKEN is None:
+        raise ValueError("CGW_FLUSH_TOKEN is not set. Skipping hook call")
+    return (settings.CGW_URL, settings.CGW_FLUSH_TOKEN)
 
-    targets = [cgw_url]
-    tokens = [cgw_flush_token]
 
-    if alternative_cgw_url is not None and alternative_cgw_flush_token is not None:
-        targets.append(alternative_cgw_url)
-        tokens.append(alternative_cgw_flush_token)
-
-    urls = list(map(lambda url: urljoin(url, "/v2/flush"), targets))
-
+def flush() -> None:
     try:
-        for url, token in zip(urls, tokens):
-            post = setup_session().post(
-                url,
-                json=json,
-                headers={"Authorization": f"Basic {token}"},
-            )
-        post.raise_for_status()
+        (url, token) = cgw_setup()
+        url = urljoin(url, "/v2/flush")
+        post(url, token, json={"invalidate": "Chains"})
     except Exception as error:
         logger.error(error)
+
+
+def hook_event(event: HookEvent) -> None:
+    try:
+        (url, token) = cgw_setup()
+        url = urljoin(url, "/v1/hooks/events")
+        post(url, token, json={"type": event.type, "chainId": str(event.chain_id)})
+    except Exception as error:
+        logger.error(error)
+
+
+def post(url: str, token: str, json: Dict[str, Any]) -> None:
+    request = setup_session().post(
+        url,
+        json=json,
+        headers={"Authorization": f"Basic {token}"},
+        timeout=settings.CGW_SESSION_TIMEOUT_SECONDS,
+    )
+    request.raise_for_status()

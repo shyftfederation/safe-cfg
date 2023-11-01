@@ -200,9 +200,9 @@ CORS_ALLOW_ALL_ORIGINS = True
 CORS_URLS_REGEX = r"^/api/.*$"
 
 CGW_URL = os.environ.get("CGW_URL")
-ALTERNATIVE_CGW_URL = os.environ.get("ALTERNATIVE_CGW_URL")
 CGW_FLUSH_TOKEN = os.environ.get("CGW_FLUSH_TOKEN")
-ALTERNATIVE_CGW_FLUSH_TOKEN = os.environ.get("ALTERNATIVE_CGW_FLUSH_TOKEN")
+CGW_SESSION_MAX_RETRIES = int(os.environ.get("CGW_SESSION_MAX_RETRIES", "0"))
+CGW_SESSION_TIMEOUT_SECONDS = int(os.environ.get("CGW_SESSION_TIMEOUT_SECONDS", "2"))
 
 # By default, Django stores files locally, using the MEDIA_ROOT and MEDIA_URL settings.
 # (using the default the default FileSystemStorage)
@@ -232,3 +232,5 @@ if allowed_csrf_origins:
         allowed_csrf_origins.strip()
         for allowed_csrf_origins in allowed_csrf_origins.split(",")
     ]
+
+FF_HOOK_EVENTS = bool(strtobool(os.getenv("FF_HOOK_EVENTS", "false")))
